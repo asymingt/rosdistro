@@ -23,14 +23,14 @@ bazel_dep(name = "rules_python", version = "1.6.1")
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(
-    python_version = "3.12",
+    python_version = "3.11",
     is_default = True,
 )
 
 pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
 pip.parse(
     hub_name = "pip_ros",
-    python_version = "3.12",
+    python_version = "3.11",
     requirements_lock = "requirements_lock.txt",
 )
 use_repo(pip, "pip_ros")
