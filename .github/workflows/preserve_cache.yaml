@@ -2,10 +2,15 @@ name: Manual Workflow
 on:
   workflow_dispatch:
     inputs:
-      release_tag:
-        description: 'The release tag for the assets'
+      distribution:
+        description: 'The distribution key'
         required: true
-        default: 'rolling/2025-09-05'
+        default: 'rolling'
+        type: string
+      release_tag:
+        description: 'The release tag for the distribution'
+        required: true
+        default: '2025-09-05'
         type: string
 jobs:
   build:
@@ -14,4 +19,4 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release_tag }}"
+          ref: ${{ inputs.distribution }} / ${{ inputs.release_tag }}
