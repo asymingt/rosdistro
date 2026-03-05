@@ -1,0 +1,117 @@
+---
+name: Cuts a new ROS release
+# this is fine since gha runs with yaml 1.2
+on:  # yamllint disable-line rule:truthy
+  workflow_dispatch:
+    inputs:
+      distribution:
+        description: 'Which distribution is the release for?'
+        required: true
+        type: choice
+        options:
+          - 'jazzy'
+          - 'kilted'
+          - 'lyrical'
+          - 'rolling'
+      date:
+        description: 'Custom release date (YYYY-MM-DD), defaults to today.'
+        required: false
+        type: string
+      remove_held_for_sync_tags:
+        description: 'Remove all held-for-sync labels on open PRs?'
+        required: true
+        type: boolean
+        default: true
+jobs:
+  cut-new-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      # Add any missing inputs.
+      - name: Calculate final inputs
+        run: |
+          USER_INPUT="${{ inputs.date }}"
+          if [ -z "$USER_INPUT" ]; then
+            FINAL_DATE=$(TZ="America/Los_Angeles" date +%Y-%m-%d)
+            echo "No date provided. Defaulting to: $FINAL_DATE"
+          else
+            FINAL_DATE=$USER_INPUT
+          fi
+          echo "RELEASE_DISTRIBUTION=${{ inputs.distribution }} >> $GITHUB_ENV
+          echo "RELEASE_DATE=$FINAL_DATE" >> $GITHUB_ENV
+          echo "RELEASE_TAG=${{ inputs.distribution }}/$FINAL_DATE >> $GITHUB_ENV
+
+      # Echo the release information to console.
+      - name: Print release information
+        run: |
+          echo "Distribution: ${{ env.RELEASE_DISTRIBUTION }}"
+          echo "Date: ${{ env.RELEASE_DATE }}"
+          echo "Tag: ${{ env.RELEASE_TAG }}"
+
+      # Checkout the repository master branch.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Install dependencies for the rosdistro_build_cache tool.
+      - name: Install rosdistro_build_cache dependencies
+        run: |
+          sudo apt update && sudo apt install locales
+          sudo locale-gen en_US en_US.UTF-8
+          sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          sudo apt install software-properties-common
+          sudo add-apt-repository universe
+          sudo apt update && sudo apt install curl -y
+          sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-rosdistro
+
+      # Rebuild the cache from scratch.
+      - name: Rebuild cache
+        run: |
+          cd ${{ env.RELEASE_DISTRIBUTION }}
+          export OLD_URL="https://github.com/ros-gbp/"
+          export NEW_URL="https://github.com/ros2-gbp/"
+          sed -i "s|${OLD_URL}|${NEW_URL}|g" distribution.yaml
+          rosdistro_build_cache --preclean --ignore-local ../index-v4.yaml ${{ env.RELEASE_DISTRIBUTION }}
+          mv ${{ env.RELEASE_DISTRIBUTION }}-cache.yaml.gz ..
+          cd ..
+
+      # Update the 
+      - name: Replace index cache entry
+        run: |
+          export OLD_URL="http://repo.ros2.org/rosdistro_cache/${{ env.DISTRIBUTION }}-cache.yaml.gz"
+          export NEW_URL="https://github.com/asymingt/rosdistro/releases/download/${{ env.DISTRIBUTION }}/${{ env.RELEASE }}-cache.yaml.gz"
+          sed -i "s|${OLD_URL}|${NEW_URL}|g" index-v4.yaml
+      - name: Push release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE }}
+          files: |
+            ${{ env.DISTRIBUTION }}-cache.yaml.gz
+            index-v4.yaml
+
+      # Find a PR that touches <distribution>/distribution.yaml and remove the
+      - name: Remove all held for sync labels on PRs
+        if: ${{ inputs.remove_held_for_sync_tags == true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LABEL_TO_REMOVE: "held for {{ env.DISTRIBUTION }} sync"
+        run: |
+          # Get all PRs that touch the target distribution file.
+          PR_NUMBERS=$(gh pr list --state open --label "$LABEL_TO_REMOVE" --json number --jq '.[].number')
+          
+          # Special case: nothing was held for sync
+          if [ -z "$PR_NUMBERS" ]; then
+            echo "No PRs found touching $TARGET_FILE"
+            exit 0
+          fi
+
+          # Loop through and remove the label
+          for PR in $PR_NUMBERS; do
+            echo "Processing PR #$PR..."
+            # Using '|| true' to prevent the script from crashing if the PR doesn't have the label
+            gh pr edit $PR --remove-label "$LABEL_TO_REMOVE" || echo "Label not found on #$PR"
+          done
