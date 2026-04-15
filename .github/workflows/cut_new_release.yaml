@@ -34,7 +34,7 @@ jobs:
         USER_INPUT="${{ inputs.date }}"
         if [ -z "$USER_INPUT" ]; then
           FINAL_DATE=$(TZ="America/Los_Angeles" date +%Y-%m-%d)
-          FINAL_REF=master
+          FINAL_REF=asymingt/preserve-distribution-cache-alongside-release-local
           echo "Date used: $FINAL_DATE (branch: $FINAL_REF, must exist)"
         else
           FINAL_DATE=$USER_INPUT
