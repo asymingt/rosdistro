@@ -107,7 +107,7 @@ distributions:
     python_version: 2
   lyrical:
     distribution: [lyrical/distribution.yaml]
-    distribution_cache: http://repo.ros2.org/rosdistro_cache/lyrical-cache.yaml.gz
+    distribution_cache: https://github.com/asymingt/rosdistro/releases/download/lyrical/2026-06-08/lyrical-cache.yaml.gz
     distribution_status: active
     distribution_type: ros2
     python_version: 3
